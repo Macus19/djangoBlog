@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+
+{$ block title %}
+    文章详情
+{% endblock}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <h1 class="col-12 mt-4 mb-4">{{article.title}}</h1>
+        <div class="col-12 alert alert-success">作者：{{article.author}}</div>
+        · <a href="#" onclick="confirm_safe_delete()">删除文章</a>
+        <!-- 新增一个隐藏表单 -->
+        <form
+            style="display:none"
+            id="safe_delete"
+            action="{%url 'article:article_safe_delete' article.id %}"
+            method="POST"
+        >
+        {% csrf_token %}
+        <button type="submit">发送</button>
+        </form>
+        <div class="col-12">
+            <p>{{article.body|safe}}</p>
+        </div>
+    </div>
+</div>
+<script>
+    // 通过jq选择器找到隐藏的表单，并点击发送按钮，表单发起POST请求，并携带csrf令牌，避免csrf攻击
+    function confirm_safe_delete(){
+        layer.open({
+            title:"确认删除",
+            content:"确认删除这篇文章吗？",
+            yes:function(index,layero){
+                $('form#safe_delete button').click()
+                layer.close(index)
+            }
+        })
+    }
+</script>
+{% endblock %}
