@@ -7,11 +7,11 @@ from django.utils import timezone
 
 class ArticlePost(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE)
-    title = models.CharField(u'标题',max_length=100)
-    body = models.TextField(u'内容')
+    title = models.CharField(max_length=100)
+    body = models.TextField()
     # 创建时间
-    created = models.DateTimeField(u'创建时间',default=timezone.now)
-    updated = models.DateTimeField(u'更新时间',auto_now=True)
+    created = models.DateTimeField(default=timezone.now)
+    updated = models.DateTimeField(auto_now=True)
 
     # 内部类Meta，用于给model定义元数据
     class Meta:
