@@ -3,27 +3,65 @@ from django.http import HttpResponse
 from .models import ArticlePost
 from .forms import ArticlePostForm
 from django.contrib.auth.models import User
+from django.core.paginator import Paginator
 import markdown
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from comment.models import Comment
 
 # Create your views here.
 def article_list(request):
-    # 取出所有博客文章
-    articles = ArticlePost.objects.all()
+    search = request.GET.get('search')
+    order = request.GET.get('order')
+    # 用户搜索逻辑
+    if search:
+        if order == 'total_views':
+            # 用Q对象进行联合搜索
+            article_list = ArticlePost.objects.filter(
+                Q(title__icontains=search)|
+                Q(body__icontains=search)
+            ).order_by('-total_views')
+        else:
+            article_list = ArticlePost.objects.filter(
+                Q(title__icontains=search)|
+                Q(body__icontains=search)
+            )
+    else:
+        # 
+        search = ''
+        if order == 'total_view':
+            article_list = ArticlePost.objects.all().order_by('-title_views')
+        else:
+            article_list = ArticlePost.objects.all()
+    # 每页显示一篇文章
+    paginator = Paginator(article_list,1)
+    # 获取url中的页码
+    page = request.GET.get('page')
+    # 将导航对象相应的页码内容返回给articles
+    articles = paginator.get_page(page)
     # 需要传递给模板的对象
-    context = {'articles':articles}
+    context = {'articles':articles,'order':order,'search':search}
     # render函数：传递给模板，并返回对象
     return render(request,'article/list.html',context)
 
 # 文章详情
 def article_detail(request,id):
     article = ArticlePost.objects.get(id=id)
-    article.body = markdown.markdown(article.body,
+    # 取出评论
+    comments = Comment.objects.filter(article=id)
+    # 浏览量加一
+    article.total_views += 1
+    article.save(update_fields=['total_views'])
+    md = markdown.Markdown(
         # 包含缩写、表格等常用扩展
        extensions = ['markdown.extensions.extra',
         # 语法高亮扩展
-        'markdown.extensions.codehilite'
+        'markdown.extensions.codehilite',
+        # 锚点目录
+        'markdown.extensions.toc'
        ])
-    context = {'article':article}
+    article.body = md.convert(article.body)
+    context = {'article':article,'toc':md.toc,'comments':comments}
     return render(request,'article/detail.html',context)
 
 # 写文章的视图
@@ -64,6 +102,7 @@ def article_safe_delete(request,id):
         return HttpResponse("仅允许post请求")
 
 # 文章更新
+@login_required(login_url="/userprofile/login/")
 def article_update(request, id):
     """
     更新文章的视图函数
@@ -74,6 +113,8 @@ def article_update(request, id):
 
     # 获取需要修改的具体文章对象
     article = ArticlePost.objects.get(id=id)
+    if request.user != article.author:
+        return HttpResponse("抱歉，你无权修改这篇文章。")
     # 判断用户是否为 POST 提交表单数据
     if request.method == "POST":
         # 将提交的数据赋值到表单实例中

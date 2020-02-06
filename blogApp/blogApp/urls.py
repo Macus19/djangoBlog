@@ -23,7 +23,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('article/',include('article.urls')),
     path('userprofile/', include('userprofile.urls')),
-    path('password-reset/',include('password_reset.urls'))
+    path('password-reset/',include('password_reset.urls')),
+    path('comment/',include('comment.urls'))
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
