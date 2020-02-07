@@ -1,6 +1,6 @@
 from django.shortcuts import render,redirect
 from django.http import HttpResponse
-from .models import ArticlePost
+from .models import ArticlePost,ArticleColumn
 from .forms import ArticlePostForm
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator
@@ -8,11 +8,17 @@ import markdown
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from comment.models import Comment
+from comment.forms import CommentForm
 
 # Create your views here.
 def article_list(request):
     search = request.GET.get('search')
     order = request.GET.get('order')
+    column = request.GET.get('column')
+    tag = request.GET.get('tag')
+
+    # 初始化查询集
+    article_list = ArticlePost.objects.all()
     # 用户搜索逻辑
     if search:
         if order == 'total_views':
@@ -29,18 +35,32 @@ def article_list(request):
     else:
         # 
         search = ''
-        if order == 'total_view':
-            article_list = ArticlePost.objects.all().order_by('-title_views')
-        else:
-            article_list = ArticlePost.objects.all()
+    
+    # 栏目查询集
+    if column is not None and column.isdigit():
+        article_list = article_list.update_fields(column=column)
+    
+    # 标签查询集
+    if tag and tag !='None':
+        article_list = article_list.filter(tags__name__in=[tag])
+    
+    # 查询集排序
+    if order == 'total_view':
+        article_list = ArticlePost.objects.all().order_by('-title_views')
+
     # 每页显示一篇文章
-    paginator = Paginator(article_list,1)
+    paginator = Paginator(article_list,3)
     # 获取url中的页码
     page = request.GET.get('page')
     # 将导航对象相应的页码内容返回给articles
     articles = paginator.get_page(page)
     # 需要传递给模板的对象
-    context = {'articles':articles,'order':order,'search':search}
+    context = {'articles':articles,
+    'order':order,
+    'search':search,
+    'column':column,
+    'tag':tag
+    }
     # render函数：传递给模板，并返回对象
     return render(request,'article/list.html',context)
 
@@ -49,6 +69,7 @@ def article_detail(request,id):
     article = ArticlePost.objects.get(id=id)
     # 取出评论
     comments = Comment.objects.filter(article=id)
+    comment_form = CommentForm()
     # 浏览量加一
     article.total_views += 1
     article.save(update_fields=['total_views'])
@@ -61,7 +82,13 @@ def article_detail(request,id):
         'markdown.extensions.toc'
        ])
     article.body = md.convert(article.body)
-    context = {'article':article,'toc':md.toc,'comments':comments}
+    context = {
+        'article':article,
+        'toc':md.toc,
+        'comments':comments,
+        # 引入评论表单
+        'comment_form':comment_form
+        }
     return render(request,'article/detail.html',context)
 
 # 写文章的视图
@@ -69,15 +96,20 @@ def article_create(request):
     # 判断用户是否提交数据
     if request.method == 'POST':
         # 将提交的数据赋值给表单实例
-        article_post_form = ArticlePostForm(data=request.POST)
+        article_post_form = ArticlePostForm(request.POST,request.FILES)
         # 判断提交的数据是否满足模型的要求
         if(article_post_form.is_valid):
             # 保存数据，但不提交到数据库中
             new_article = article_post_form.save(commit=False)
             # 指定目前登录的用户为作者
             new_article.author = User.objects.get(id=request.user.id)
+            # 保存栏目
+            if request.POST['column']!='none':
+                new_article.column = ArticleColumn.objects.get(id=request.POST['column'])
             # 文章保存到数据库中
             new_article.save()
+            # 保存tags的多对多关系
+            article_post_form.save_m2m()
             # 完成后返回到文章列表
             return redirect("article:article_list")
         # 如果数据不合法，返回错误信息
@@ -87,8 +119,10 @@ def article_create(request):
     else:
         # 创建表单类实例
         article_post_form = ArticlePostForm()
+        # 获得栏目选项
+        columns = ArticleColumn.objects.all()
         # 赋值上下文
-        context = {'article_post_form':article_post_form}
+        context = {'article_post_form':article_post_form,'columns':columns}
         # 返回模板
         return render(request,'article/create.html',context)
 
@@ -124,6 +158,10 @@ def article_update(request, id):
             # 保存新写入的 title、body 数据并保存
             article.title = request.POST['title']
             article.body = request.POST['body']
+            if request.POST['column'] != 'none':
+                article.column = ArticleColumn.objects.get(id=request.POST['column'])
+            else:
+                article.column = None
             article.save()
             # 完成后返回到修改后的文章中。需传入文章的 id 值
             return redirect("article:article_detail", id=id)
@@ -135,7 +173,11 @@ def article_update(request, id):
     else:
         # 创建表单类实例
         article_post_form = ArticlePostForm()
+        columns = ArticleColumn.objects.all()
         # 赋值上下文，将 article 文章对象也传递进去，以便提取旧的内容
-        context = { 'article': article, 'article_post_form': article_post_form }
+        context = { 'article': article, 
+        'article_post_form': article_post_form,
+        'columns' :columns,
+        }
         # 将响应返回到模板中
         return render(request, 'article/update.html', context)

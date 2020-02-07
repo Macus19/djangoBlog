@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from article.models import ArticlePost
+from ckeditor.fields import RichTextField
 
 # Create your models here.
 # 博客的评论
@@ -17,7 +18,8 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
         related_name='comments'
     )
-    body = models.TextField()
+    # 使用富文本
+    body = RichTextField()
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
